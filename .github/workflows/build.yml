@@ -42,4 +42,3 @@ jobs:
         with:
           name: My-Bulk-SMS-App
           path: app/build/outputs/apk/debug/app-debug.apk
-
