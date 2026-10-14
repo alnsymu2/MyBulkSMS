@@ -1,0 +1,265 @@
+name: Build My Bulk SMS APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Android Project & Code
+        run: |
+          mkdir -p app/src/main/java/com/company/bulksms
+          mkdir -p app/src/main/res/layout
+
+          cat << 'EOF' > settings.gradle
+          rootProject.name = "BulkSMS"
+          include ':app'
+          EOF
+
+          cat << 'EOF' > build.gradle
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.company.bulksms'
+              compileSdk 33
+              defaultConfig {
+                  applicationId "com.company.bulksms"
+                  minSdk 21
+                  targetSdk 33
+                  versionCode 1
+                  versionName "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.SEND_SMS" />
+              <application
+                  android:label="مرسل الرواتب والمستحقات"
+                  android:theme="@android:style/Theme.Material.Light">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:fillViewport="true">
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="vertical"
+                  android:padding="16dp"
+                  android:layoutDirection="rtl">
+
+                  <TextView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:text="1. الصق بيانات الموظفين (الاسم,الرقم,المتغير):"
+                      android:textStyle="bold"
+                      android:textSize="16sp" />
+
+                  <EditText
+                      android:id="@+id/etData"
+                      android:layout_width="match_parent"
+                      android:layout_height="200dp"
+                      android:gravity="top|right"
+                      android:hint="أحمد,771234567,150000\nمحمد,731234567,180000"
+                      android:inputType="textMultiLine"
+                      android:background="@android:drawable/editbox_background" />
+
+                  <TextView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="12dp"
+                      android:text="2. قالب الرسالة:"
+                      android:textStyle="bold"
+                      android:textSize="16sp" />
+
+                  <EditText
+                      android:id="@+id/etTemplate"
+                      android:layout_width="match_parent"
+                      android:layout_height="100dp"
+                      android:gravity="top|right"
+                      android:text="مرحباً {الاسم}، تم صرف مستحقاتك وقدرها {المتغير} ريال."
+                      android:inputType="textMultiLine"
+                      android:background="@android:drawable/editbox_background" />
+
+                  <TextView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="12dp"
+                      android:text="3. الفاصل الزمني بين كل رسالة (بالثواني):"
+                      android:textStyle="bold" />
+
+                  <EditText
+                      android:id="@+id/etDelay"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:text="6"
+                      android:inputType="number"
+                      android:background="@android:drawable/editbox_background" />
+
+                  <Button
+                      android:id="@+id/btnSend"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="16dp"
+                      android:text="بدء الإرسال للجميع"
+                      android:textSize="16sp" />
+
+                  <TextView
+                      android:id="@+id/tvStatus"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="16dp"
+                      android:text="الحالة: جاهز للإرسال"
+                      android:textSize="16sp"
+                      android:textAlignment="center" />
+              </LinearLayout>
+          </ScrollView>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/company/bulksms/MainActivity.java
+          package com.company.bulksms;
+
+          import android.Manifest;
+          import android.app.Activity;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.telephony.SmsManager;
+          import android.view.WindowManager;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.TextView;
+          import android.widget.Toast;
+          import java.util.ArrayList;
+
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      if (checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+                          requestPermissions(new String[]{Manifest.permission.SEND_SMS}, 101);
+                      }
+                  }
+
+                  EditText etData = findViewById(R.id.etData);
+                  EditText etTemplate = findViewById(R.id.etTemplate);
+                  EditText etDelay = findViewById(R.id.etDelay);
+                  Button btnSend = findViewById(R.id.btnSend);
+                  TextView tvStatus = findViewById(R.id.tvStatus);
+
+                  btnSend.setOnClickListener(v -> {
+                      String data = etData.getText().toString().trim();
+                      String template = etTemplate.getText().toString().trim();
+                      String delayStr = etDelay.getText().toString().trim();
+
+                      if (data.isEmpty() || template.isEmpty()) {
+                          Toast.makeText(this, "يرجى إدخال البيانات والقالب", Toast.LENGTH_SHORT).show();
+                          return;
+                      }
+
+                      int delaySec = 6;
+                      try { delaySec = Integer.parseInt(delayStr); } catch (Exception ignored) {}
+
+                      String[] lines = data.split("\n");
+                      SmsManager smsManager = SmsManager.getDefault();
+                      Handler handler = new Handler(Looper.getMainLooper());
+
+                      btnSend.setEnabled(false);
+                      tvStatus.setText("بدأ الإرسال... يرجى عدم إغلاق التطبيق");
+
+                      for (int i = 0; i < lines.length; i++) {
+                          final int index = i;
+                          final String line = lines[i].trim();
+                          handler.postDelayed(() -> {
+                              String[] parts = line.split("[,،]");
+                              if (parts.length >= 2) {
+                                  String name = parts[0].trim();
+                                  String phone = parts[1].trim();
+                                  String val = parts.length >= 3 ? parts[2].trim() : "";
+
+                                  String msg = template.replace("{الاسم}", name).replace("{المتغير}", val);
+                                  try {
+                                      ArrayList<String> partsMsg = smsManager.divideMessage(msg);
+                                      smsManager.sendMultipartTextMessage(phone, null, partsMsg, null, null);
+                                      tvStatus.setText("تم الإرسال (" + (index + 1) + " من " + lines.length + "): " + name);
+                                  } catch (Exception e) {
+                                      tvStatus.setText("خطأ عند: " + name);
+                                  }
+                              }
+                              if (index == lines.length - 1) {
+                                  btnSend.setEnabled(true);
+                                  tvStatus.setText("اكتمل إرسال جميع الرسائل بنجاح! (" + lines.length + ")");
+                                  Toast.makeText(MainActivity.this, "اكتمل الإرسال!", Toast.LENGTH_LONG).show();
+                              }
+                          }, (long) index * delaySec * 1000);
+                      }
+                  });
+              }
+          }
+          EOF
+
+      - name: Build APK with Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Assemble Debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: My-Bulk-SMS-App
+          path: app/build/outputs/apk/debug/app-debug.apk
