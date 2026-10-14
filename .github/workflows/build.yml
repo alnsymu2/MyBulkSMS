@@ -18,7 +18,12 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate Android Project & Code
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.2'
+
+      - name: Generate Android Project & Build
         run: |
           mkdir -p app/src/main/java/com/company/bulksms
           mkdir -p app/src/main/res/layout
@@ -253,10 +258,8 @@ jobs:
           }
           EOF
 
-      - name: Build APK with Gradle
-        uses: gradle/actions/setup-gradle@v3
-      - name: Assemble Debug APK
-        run: gradle assembleDebug
+          sed -i 's/^          //' settings.gradle build.gradle app/build.gradle app/src/main/AndroidManifest.xml app/src/main/res/layout/activity_main.xml app/src/main/java/com/company/bulksms/MainActivity.java
+          gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
